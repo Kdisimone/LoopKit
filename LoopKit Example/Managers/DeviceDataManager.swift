@@ -7,10 +7,7 @@
 //
 
 import Foundation
-import CarbKit
-import GlucoseKit
 import HealthKit
-import InsulinKit
 import LoopKit
 
 
@@ -24,6 +21,7 @@ class DeviceDataManager : CarbStoreDelegate {
 
         carbStore = CarbStore(
             healthStore: healthStore,
+            cacheStore: cacheStore,
             carbRatioSchedule: carbRatioSchedule,
             insulinSensitivitySchedule: insulinSensitivitySchedule
         )
@@ -40,7 +38,7 @@ class DeviceDataManager : CarbStoreDelegate {
             basalProfile: basalRateSchedule,
             insulinSensitivitySchedule: insulinSensitivitySchedule
         )
-        glucoseStore = GlucoseStore(healthStore: healthStore)
+        glucoseStore = GlucoseStore(healthStore: healthStore, cacheStore: cacheStore)
         carbStore?.delegate = self
     }
 
