@@ -36,14 +36,18 @@ public class InsulinDeliveryStore: HealthKitSampleStore {
     /// Should only be accessed on dataAccessQueue
     private var lastBasalEndDate: LoadableDate = .none
 
-    public init(healthStore: HKHealthStore, effectDuration: TimeInterval) {
-        super.init(healthStore: healthStore, type: insulinType, observationStart: Date(timeIntervalSinceNow: -effectDuration))
+    public init(healthStore: HKHealthStore, effectDuration: TimeInterval, observationEnabled: Bool) {
+        super.init(healthStore: healthStore, type: insulinType, observationStart: Date(timeIntervalSinceNow: -effectDuration), observationEnabled: observationEnabled)
     }
 
     public override func processResults(from query: HKAnchoredObjectQuery, added: [HKSample], deleted: [HKDeletedObject], error: Error?) {
         // New data not written by LoopKit (see `MetadataKeyHasLoopKitOrigin`) should be assumed external to what could be fetched as PumpEvent data.
         // That external data could be factored into dose computation with some modification:
         // An example might be supplemental injections in cases of extended exercise periods without a pump
+    }
+
+    public override var preferredUnit: HKUnit! {
+        return super.preferredUnit
     }
 }
 

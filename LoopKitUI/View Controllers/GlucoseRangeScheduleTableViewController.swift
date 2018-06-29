@@ -26,6 +26,12 @@ public class GlucoseRangeScheduleTableViewController: DailyValueScheduleTableVie
         tableView.register(GlucoseRangeOverrideTableViewCell.nib(), forCellReuseIdentifier: GlucoseRangeOverrideTableViewCell.className)
     }
 
+    public override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+
+        delegate?.dailyValueScheduleTableViewControllerWillFinishUpdating(self)
+    }
+
     // MARK: - State
 
     public var scheduleItems: [RepeatingScheduleValue<DoubleRange>] = []
@@ -268,7 +274,7 @@ public class GlucoseRangeScheduleTableViewController: DailyValueScheduleTableVie
 
     // MARK: - RepeatingScheduleValueTableViewCellDelegate
 
-    override func repeatingScheduleValueTableViewCellDidUpdateDate(_ cell: RepeatingScheduleValueTableViewCell) {
+    override func datePickerTableViewCellDidUpdateDate(_ cell: DatePickerTableViewCell) {
         if let indexPath = tableView.indexPath(for: cell) {
             let currentItem = scheduleItems[indexPath.row]
 
@@ -278,7 +284,7 @@ public class GlucoseRangeScheduleTableViewController: DailyValueScheduleTableVie
             )
         }
 
-        super.repeatingScheduleValueTableViewCellDidUpdateDate(cell)
+        super.datePickerTableViewCellDidUpdateDate(cell)
     }
 
     func repeatingScheduleValueTableViewCellDidUpdateValue(_ cell: RepeatingScheduleValueTableViewCell) {

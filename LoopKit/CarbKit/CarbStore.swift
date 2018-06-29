@@ -88,7 +88,9 @@ public final class CarbStore: HealthKitSampleStore {
     private let carbType = HKQuantityType.quantityType(forIdentifier: HKQuantityTypeIdentifier.dietaryCarbohydrates)!
 
     /// The preferred unit. iOS currently only supports grams for dietary carbohydrates.
-    public let preferredUnit = HKUnit.gram()
+    public override var preferredUnit: HKUnit! {
+        return super.preferredUnit
+    }
 
     /// Carbohydrate-to-insulin ratio
     public var carbRatioSchedule: CarbRatioSchedule? {
@@ -147,6 +149,7 @@ public final class CarbStore: HealthKitSampleStore {
     public init(
         healthStore: HKHealthStore,
         cacheStore: PersistenceController,
+        observationEnabled: Bool = true,
         defaultAbsorptionTimes: DefaultAbsorptionTimes = defaultAbsorptionTimes,
         carbRatioSchedule: CarbRatioSchedule? = nil,
         insulinSensitivitySchedule: InsulinSensitivitySchedule? = nil,
@@ -162,9 +165,9 @@ public final class CarbStore: HealthKitSampleStore {
         self.delta = calculationDelta
         self.delay = effectDelay
 
-        super.init(healthStore: healthStore, type: carbType, observationStart: Date(timeIntervalSinceNow: -defaultAbsorptionTimes.slow * 2))
+        super.init(healthStore: healthStore, type: carbType, observationStart: Date(timeIntervalSinceNow: -defaultAbsorptionTimes.slow * 2), observationEnabled: observationEnabled)
 
-        cacheStore.onReady { [unowned self] (error) in
+        cacheStore.onReady { (error) in
             guard error == nil else { return }
 
             // Migrate modifiedCarbEntries and deletedCarbEntryIDs
@@ -180,7 +183,7 @@ public final class CarbStore: HealthKitSampleStore {
                     object.externalID = externalID
                 }
 
-                try? self.cacheStore.managedObjectContext.save()
+                self.cacheStore.save()
             }
 
             UserDefaults.standard.purgeLegacyCarbEntryKeys()
@@ -190,14 +193,6 @@ public final class CarbStore: HealthKitSampleStore {
     }
 
     // MARK: - HealthKitSampleStore
-
-    public override func observeUpdates(to query: HKObserverQuery, error: Error?) {
-        if let error = error {
-            self.delegate?.carbStore(self, didError: .healthStoreError(error))
-        } else {
-            super.observeUpdates(to: query, error: error)
-        }
-    }
 
     public override func processResults(from query: HKAnchoredObjectQuery, added: [HKSample], deleted: [HKDeletedObject], error: Error?) {
         if let error = error {
@@ -212,6 +207,7 @@ public final class CarbStore: HealthKitSampleStore {
             if let samples = added as? [HKQuantitySample] {
                 for sample in samples {
                     if self.addCachedObject(for: sample) {
+                        self.log.debug("Saved sample %@ into cache from HKAnchoredObjectQuery", sample.uuid.uuidString)
                         notificationRequired = true
                     }
                 }
@@ -220,13 +216,14 @@ public final class CarbStore: HealthKitSampleStore {
             // Remove deleted samples
             for sample in deleted {
                 if self.deleteCachedObject(for: sample) {
+                    self.log.debug("Deleted sample %@ from cache from HKAnchoredObjectQuery", sample.uuid.uuidString)
                     notificationRequired = true
                 }
             }
 
             // Notify listeners only if a meaningful change was made
             if notificationRequired {
-                try? self.cacheStore.managedObjectContext.save()
+                self.cacheStore.save()
                 self.syncExternalDB()
 
                 NotificationCenter.default.post(name: .CarbEntriesDidUpdate, object: self, userInfo: [CarbStore.notificationUpdateSourceKey: UpdateSource.queriedByHealthKit.rawValue])
@@ -348,6 +345,7 @@ extension CarbStore {
                     NotificationCenter.default.post(name: .CarbEntriesDidUpdate, object: self, userInfo: [CarbStore.notificationUpdateSourceKey: UpdateSource.changedInApp.rawValue])
                     self.syncExternalDB()
                 } else if let error = error {
+                    self.log.error("Error saving entry %@: %@", sample.uuid.uuidString, String(describing: error))
                     completion(.failure(.healthStoreError(error)))
                 } else {
                     assertionFailure()
@@ -373,6 +371,7 @@ extension CarbStore {
                     NotificationCenter.default.post(name: .CarbEntriesDidUpdate, object: self, userInfo: [CarbStore.notificationUpdateSourceKey: UpdateSource.changedInApp.rawValue])
                     self.syncExternalDB()
                 } else if let error = error {
+                    self.log.error("Error replacing entry %@: %@", oldEntry.sampleUUID.uuidString, String(describing: error))
                     completion(.failure(.healthStoreError(error)))
                 } else {
                     assertionFailure()
@@ -396,6 +395,7 @@ extension CarbStore {
                     NotificationCenter.default.post(name: .CarbEntriesDidUpdate, object: self, userInfo: [CarbStore.notificationUpdateSourceKey: UpdateSource.changedInApp.rawValue])
                     self.syncExternalDB()
                 } else if let error = error {
+                    self.log.error("Error deleting entry %@: %@", entry.sampleUUID.uuidString, String(describing: error))
                     completion(.failure(.healthStoreError(error)))
                 } else {
                     assertionFailure()
@@ -454,7 +454,7 @@ extension CarbStore {
             let object = CachedCarbObject(context: self.cacheStore.managedObjectContext)
             object.update(from: entry)
 
-            try? self.cacheStore.managedObjectContext.save()
+            self.cacheStore.save()
             created = true
         }
 
@@ -470,7 +470,7 @@ extension CarbStore {
                 object.uploadState = .notUploaded
             }
 
-            try? self.cacheStore.managedObjectContext.save()
+            self.cacheStore.save()
         }
     }
 
@@ -501,7 +501,7 @@ extension CarbStore {
                 deleted = true
             }
 
-            try? self.cacheStore.managedObjectContext.save()
+            self.cacheStore.save()
         }
 
         return deleted
@@ -581,7 +581,7 @@ extension CarbStore {
                 objectsToDelete.forEach { $0.uploadState = .uploading }
             }
 
-            try? self.cacheStore.managedObjectContext.save()
+            self.cacheStore.save()
         }
 
         if entriesToUpload.count > 0 {
@@ -603,13 +603,14 @@ extension CarbStore {
                             entry.startDate > self.earliestCacheDate,
                             let externalID = entry.externalID
                         {
+                            self.log.info("Uploaded entry %@ not found in cache", entry.sampleUUID.uuidString)
                             let deleted = DeletedCarbObject(context: self.cacheStore.managedObjectContext)
                             deleted.externalID = externalID
                             hasMissingObjects = true
                         }
                     }
 
-                    try? self.cacheStore.managedObjectContext.save()
+                    self.cacheStore.save()
 
                     if hasMissingObjects {
                         self.queue.async {
@@ -638,7 +639,7 @@ extension CarbStore {
                         }
                     }
 
-                    try? self.cacheStore.managedObjectContext.save()
+                    self.cacheStore.save()
                 }
             }
         }
@@ -816,7 +817,7 @@ extension CarbStore {
             case .success(let samples):
                 let total = samples.totalCarbs ?? CarbValue(
                     startDate: start,
-                    quantity: HKQuantity(unit: .gram(), doubleValue: 0)
+                    quantity: HKQuantity(unit: self.preferredUnit, doubleValue: 0)
                 )
 
                 completion(.success(total))
@@ -835,10 +836,6 @@ extension CarbStore {
     ///
     /// - parameter completionHandler: A closure called once the report has been generated. The closure takes a single argument of the report string.
     public func generateDiagnosticReport(_ completionHandler: @escaping (_ report: String) -> Void) {
-        func entryReport(_ entry: StoredCarbEntry) -> String {
-            return "* \(entry.startDate), \(entry.quantity), \(entry.absorptionTime ?? self.defaultAbsorptionTimes.medium), \(entry.createdByCurrentApp ? "" : "External"), uploadState: \(entry.isUploaded)"
-        }
-
         queue.async {
             var report: [String] = [
                 "## CarbStore",
@@ -847,21 +844,39 @@ extension CarbStore {
                 "* defaultAbsorptionTimes: \(self.defaultAbsorptionTimes)",
                 "* insulinSensitivitySchedule: \(self.insulinSensitivitySchedule?.debugDescription ?? "")",
                 "* delay: \(self.delay)",
+                "* delta: \(self.delta)",
+                "* absorptionTimeOverrun: \(self.absorptionTimeOverrun)",
                 super.debugDescription,
                 "",
-                "### cachedCarbEntries"
+                "cachedCarbEntries: [",
+                "\tStoredCarbEntry(sampleUUID, syncIdentifier, syncVersion, startDate, quantity, foodType, absorptionTime, createdByCurrentApp, externalID, isUploaded)"
             ]
 
-            for entry in self.getCachedCarbEntries() {
-                report.append(entryReport(entry))
-            }
-
+            report.append(self.getCachedCarbEntries().map({
+                return [
+                    "\t",
+                    String(describing: $0.sampleUUID),
+                    $0.syncIdentifier ?? "",
+                    String(describing: $0.syncVersion),
+                    String(describing: $0.startDate),
+                    String(describing: $0.quantity),
+                    $0.foodType ?? "",
+                    String(describing: $0.absorptionTime ?? self.defaultAbsorptionTimes.medium),
+                    String(describing: $0.createdByCurrentApp),
+                    $0.externalID ?? "",
+                    String(describing: $0.isUploaded),
+                ].joined(separator: ", ")
+            }).joined(separator: "\n"))
+            report.append("]")
             report.append("")
-            report.append("### deletedCarbEntries")
 
+            report.append("deletedCarbEntries: [")
+            report.append("\tDeletedCarbEntry(externalID, isUploaded)")
             for entry in self.cachedDeletedCarbEntries {
-                report.append("* \(entry.externalID), uploadState: \(entry.isUploaded)")
+                report.append("\t\(entry.externalID), \(entry.isUploaded)")
             }
+            report.append("]")
+            report.append("")
 
             completionHandler(report.joined(separator: "\n"))
         }
