@@ -84,7 +84,7 @@ open class SingleValueScheduleTableViewController: DailyValueScheduleTableViewCo
         return insertableIndices(for: scheduleItems, removing: row, with: timeInterval)
     }
 
-    func preferredValueFractionDigits() -> Int {
+    var preferredValueFractionDigits: Int {
         return 1
     }
 
@@ -155,7 +155,7 @@ open class SingleValueScheduleTableViewController: DailyValueScheduleTableViewCo
             cell.timeZone = timeZone
             cell.date = midnight.addingTimeInterval(item.startTime)
 
-            cell.valueNumberFormatter.minimumFractionDigits = preferredValueFractionDigits()
+            cell.valueNumberFormatter.minimumFractionDigits = preferredValueFractionDigits
 
             cell.value = item.value
             cell.unitString = unitDisplayString
@@ -251,9 +251,9 @@ open class SingleValueScheduleTableViewController: DailyValueScheduleTableViewCo
                             self.isSyncInProgress = false
                             self.delegate?.dailyValueScheduleTableViewControllerWillFinishUpdating(self)
                         case .failure(let error):
-                            self.presentAlertController(with: error, animated: true, completion: {
+                            self.present(UIAlertController(with: error), animated: true) {
                                 self.isSyncInProgress = false
-                            })
+                            }
                         }
                     }
                 }
