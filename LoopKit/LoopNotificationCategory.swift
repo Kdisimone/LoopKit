@@ -17,4 +17,6 @@ public enum LoopNotificationCategory: String {
     case pumpExpirationWarning
     case pumpExpired
     case pumpFault
+    case remoteTempSet
+    case remoteTempCancel
 }
