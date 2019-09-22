@@ -94,7 +94,7 @@ public final class AddEditOverrideTableViewController: UITableViewController {
 
     private var name: String? { didSet { updateSaveButtonEnabled() } }
 
-    private var targetRange: DoubleRange? { didSet { updateSaveButtonEnabled() } }
+    private var targetRange: ClosedRange<HKQuantity>? { didSet { updateSaveButtonEnabled() } }
 
     private var insulinNeedsScaleFactor = 1.0 { didSet { updateSaveButtonEnabled() }}
 
@@ -113,7 +113,12 @@ public final class AddEditOverrideTableViewController: UITableViewController {
 
     private func configure(with settings: TemporaryScheduleOverrideSettings) {
         if let targetRange = settings.targetRange {
-            self.targetRange = DoubleRange(minValue: targetRange.lowerBound.doubleValue(for: glucoseUnit), maxValue: targetRange.upperBound.doubleValue(for: glucoseUnit))
+            self.targetRange = ClosedRange<HKQuantity>(uncheckedBounds: (
+                lower: HKQuantity(unit: glucoseUnit, doubleValue: targetRange.lowerBound.doubleValue(for: glucoseUnit)
+                ),
+                upper: HKQuantity(unit: glucoseUnit, doubleValue: targetRange.upperBound.doubleValue(for: glucoseUnit)
+                )
+            ))
         } else {
             targetRange = nil
         }
@@ -250,7 +255,10 @@ public final class AddEditOverrideTableViewController: UITableViewController {
                 let cell = tableView.dequeueReusableCell(withIdentifier: DoubleRangeTableViewCell.className, for: indexPath) as! DoubleRangeTableViewCell
                 cell.numberFormatter = quantityFormatter.numberFormatter
                 cell.titleLabel.text = NSLocalizedString("Target Range", comment: "The text for the override target range setting")
-                cell.range = targetRange
+                cell.range = DoubleRange(
+                    minValue: targetRange?.lowerBound.doubleValue(for: glucoseUnit) ?? 0,
+                    maxValue: targetRange?.upperBound.doubleValue(for: glucoseUnit) ?? 0
+                )
                 cell.unitLabel.text = quantityFormatter.string(from: glucoseUnit)
                 cell.delegate = self
                 return cell
@@ -435,7 +443,7 @@ extension AddEditOverrideTableViewController {
 
     private var configuredSettings: TemporaryScheduleOverrideSettings? {
         if let targetRange = targetRange {
-            guard targetRange.maxValue >= targetRange.minValue else {
+            guard targetRange.upperBound >= targetRange.lowerBound else {
                 return nil
             }
         } else {
@@ -446,7 +454,10 @@ extension AddEditOverrideTableViewController {
 
         return TemporaryScheduleOverrideSettings(
             unit: glucoseUnit,
-            targetRange: targetRange,
+            targetRange: DoubleRange(
+                minValue: targetRange?.lowerBound.doubleValue(for: glucoseUnit) ?? 0,
+                maxValue: targetRange?.upperBound.doubleValue(for: glucoseUnit) ?? 0
+            ),
             insulinNeedsScaleFactor: insulinNeedsScaleFactor == 1.0 ? nil : insulinNeedsScaleFactor
         )
     }
@@ -632,7 +643,12 @@ extension AddEditOverrideTableViewController: DoubleRangeTableViewCellDelegate {
         guard let indexPath = tableView.indexPath(for: cell) else { return }
         switch propertyRow(for: indexPath) {
         case .targetRange:
-            targetRange = cell.range
+            targetRange = ClosedRange<HKQuantity>(
+                uncheckedBounds: (
+                    lower: HKQuantity(unit: glucoseUnit, doubleValue: cell.range?.minValue ?? 0),
+                    upper: HKQuantity(unit: glucoseUnit, doubleValue: cell.range?.maxValue ?? 0)
+                )
+            )
         default:
             assertionFailure()
         }
