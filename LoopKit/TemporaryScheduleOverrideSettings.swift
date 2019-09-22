@@ -14,7 +14,17 @@ public struct TemporaryScheduleOverrideSettings: Hashable {
     public var insulinNeedsScaleFactor: Double?
 
     public var targetRange: ClosedRange<HKQuantity>? {
-        return targetRangeInMgdl.map { $0.quantityRange(for: .milligramsPerDeciliter) }
+        get {
+            return targetRangeInMgdl.map { $0.quantityRange(for: .milligramsPerDeciliter) }
+        }
+        set (newValue) {
+            if let value = newValue {
+                targetRangeInMgdl = DoubleRange(
+                    minValue: value.lowerBound.doubleValue(for: .milligramsPerDeciliter),
+                    maxValue: value.upperBound.doubleValue(for: .milligramsPerDeciliter)
+                )
+            }
+        }
     }
 
     public var basalRateMultiplier: Double? {
