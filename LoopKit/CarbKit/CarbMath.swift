@@ -673,13 +673,18 @@ fileprivate class CarbStatusBuilder<T: CarbEntry> {
     }
     
     func absorptionRateAtTime(t: TimeInterval) -> Double {
-        // Absorption rate found based on time nomalized to estimated total absorption time
+        // Absorption rate found based on time nomalized to maximumAbsorptionTime
+        // dm61 TODO(?) an attempt below to nomalize to dynamicAbsorptionTime resulted in anomalies in post-absorption split among overlapping carb entries
+        /*
         let dynamicAbsorptionTime = min(t + estimatedTimeRemaining, maxAbsorptionTime)
         guard dynamicAbsorptionTime > 0 else {
             return(0.0)
         }
         let absorptionRate = entryGrams / dynamicAbsorptionTime
         let percentTime = t / dynamicAbsorptionTime
+        */
+        let absorptionRate = entryGrams / maxAbsorptionTime
+        let percentTime = t / maxAbsorptionTime
         return absorptionRate * PiecewiseLinearAbsorption.percentRateAtPercentTime(forPercentTime: percentTime)
     }
     
@@ -775,9 +780,9 @@ extension Collection where Element: CarbEntry {
                 var partialEffectValue: Double = 0.0
                 if totalRate > 0 {
                     partialEffectValue = Swift.min(builder.remainingEffect, (absorptionRateAtEffectTime / totalRate) * effectValue)
+                    totalRate -= absorptionRateAtEffectTime
+                    effectValue -= partialEffectValue
                 }
-                totalRate -= absorptionRateAtEffectTime
-                effectValue -= partialEffectValue
 
                 builder.addNextEffect(partialEffectValue, start: dxEffect.startDate, end: dxEffect.endDate)
 
